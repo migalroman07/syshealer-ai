@@ -120,7 +120,7 @@ def ask_for_feedback():
     return action, error_output
 
 
-def fix_log(log: Incident, config: dict, db: Session):
+def fix_log(log: Incident, db: Session):
     original_status = log.status
     log.status = "processing"
     db.commit()
@@ -171,7 +171,7 @@ def fix_log(log: Incident, config: dict, db: Session):
                 print(clean_commands)
                 print("===========================================================\n")
                 print(
-                    "Script had already been executed earlier. Type in the result, please."
+                    "[*] Script had already been executed earlier. Type in the result, please."
                 )
 
                 action, err_text = ask_for_feedback()
@@ -393,7 +393,7 @@ def fix_menu():
 
                 explanation = (
                     str("\n" + desc)
-                    if desc and desc != "No desc"
+                    if desc and desc != "No desciption"
                     else ("\n" + "=" * 30)
                 )
 
@@ -409,7 +409,10 @@ def fix_menu():
                     )
                 )
 
-            ui_choices += [Choice("<- Back", value="back")]
+            ui_choices += [
+                Choice("\nDelete logs.", value="delete"),
+                Choice("<- Back", value="back"),
+            ]
 
             selected_log = q.select(
                 f"========== Select log to work with ({log_status}) ==========",
@@ -418,10 +421,12 @@ def fix_menu():
 
             if not selected_log or selected_log == "back":
                 return
+            if selected_log == "delete":
+                delete_logs(db, log_status)
+                return
 
             if log_status in ["pending", "waiting"]:
-                config = load_config()
-                fix_log(selected_log, config, db)
+                fix_log(selected_log, db)
             elif log_status == "resolved":
                 view_resolved_log(selected_log)
 
@@ -429,17 +434,47 @@ def fix_menu():
         db.close()
 
 
+def delete_logs(db: Session, log_status: str):
+    logs = (
+        db.query(Incident)
+        .where(Incident.status == log_status)
+        .order_by(Incident.id.desc())
+        .all()
+    )
+
+    choices = [
+        q.Choice(f"ID {l.id} | Occurrences: {l.occurrences}", value=l.id) for l in logs
+    ]
+
+    clear_screen()
+    selected_ids = q.checkbox(
+        "Select logs to delete permanently (Space to check, Enter to confirm):",
+        choices=choices,
+    ).ask()
+
+    if selected_ids:
+        confirm = q.confirm(
+            f"Are you sure you want to delete {len(selected_ids)} logs?"
+        ).ask()
+        if confirm:
+            db.query(Incident).filter(Incident.id.in_(selected_ids)).delete(
+                synchronize_session=False
+            )
+            db.commit()
+            print(f"[+] Successfully deleted {len(selected_ids)} logs.")
+            input("Press Enter to continue...")
+
+
 def configure_menu(config):
     while True:
-        os.system("clear" if os.name == "posix" else "cls")
+        clear_screen()
 
         aspect = q.select(
             "=========== What you'd like to configure? ==========",
             choices=[
-                Choice("1. Mode", value="mode"),
-                Choice("2. AI Provider/Model", value="provider"),
-                Choice("3. Adjust some features.", value="features"),
-                Choice("4. System setup", value="system"),
+                Choice("1. AI Provider/Model", value="provider"),
+                Choice("2. Adjust some features.", value="features"),
+                Choice("3. System setup.", value="system"),
                 Choice("<- Back", value="back"),
             ],
         ).ask()
@@ -448,47 +483,10 @@ def configure_menu(config):
             return
 
         match aspect:
-            case "mode":
-                while True:
-                    os.system("clear" if os.name == "posix" else "cls")
-                    new_mode = q.select(
-                        "========== Select mode ==========",
-                        choices=[
-                            Choice("1. Manual call", value="manual"),
-                            Choice("2. Auto call (choose interval)", value="auto"),
-                            Choice("<- Back", value="back"),
-                        ],
-                    ).ask()
-
-                    if not new_mode or new_mode == "back":
-                        break
-
-                    if new_mode == "manual":
-                        config["system"]["interval"] = 0
-                        save_config(config)
-                        print("\nMode changed to Manual.")
-                        input("Press Enter to continue...")
-                        break
-                    elif new_mode == "auto":
-                        while True:
-                            new_interval = q.text(
-                                "Enter an interval in minutes (0 for constant checks): "
-                            ).ask()
-
-                            if not new_interval:
-                                break
-
-                            if new_interval.isdigit():
-                                config["system"]["interval"] = int(new_interval)
-                                save_config(config)
-                                print(f"\nInterval changed to {new_interval} minutes.")
-                                input("Press Enter to continue...")
-                                break
-                        break
 
             case "provider":
                 while True:
-                    os.system("clear" if os.name == "posix" else "cls")
+                    clear_screen()
                     providers = list(map(Choice, config["providers"].keys())) + [
                         Choice("New provider (Manual enter)", value="new"),
                         Choice("<- Back", value="back"),
@@ -675,7 +673,12 @@ def configure_menu(config):
                     sys_opt = q.select(
                         "========== System Setup ==========",
                         choices=[
-                            Choice("1. Max log length", value="max_log"),
+                            Choice("1. Max log length.", value="max_log"),
+                            Choice(
+                                "2. Choose the database type (Reset required after changing).",
+                                value="db_type",
+                            ),
+                            Choice("3. Mode", value="mode"),
                             Choice("<- Back", value="back"),
                         ],
                     ).ask()
@@ -691,21 +694,86 @@ def configure_menu(config):
                             print(f"\nMax log length changed to {new_len}.")
                             input("Press Enter to continue...")
 
+                    if sys_opt == "db_type":
+                        curr_db_type = config.get("db_type", "sqlite")
+                        db_type = q.select(
+                            "========== Choose DB type ==========",
+                            choices=[
+                                Choice("1. SQLite", value="sqlite"),
+                                Choice("2. PostreSQl", value="postgres"),
+                                Choice("<- Back", value="back"),
+                            ],
+                        ).ask()
+
+                        if db_type == "back":
+                            break
+                        if db_type == curr_db_type:
+                            pass
+                        elif db_type == "sqlite":
+                            config["db_type"] = "sqlite"
+                        else:
+                            config["db_type"] = "postgres"
+
+                        print(f"DB type changed to {db_type}.")
+                        continue
+
+                    if sys_opt == "mode":
+                        while True:
+                            clear_screen()
+                            new_mode = q.select(
+                                "========== Select mode ==========",
+                                choices=[
+                                    Choice("1. Manual call", value="manual"),
+                                    Choice(
+                                        "2. Auto call (choose interval)", value="auto"
+                                    ),
+                                    Choice("<- Back", value="back"),
+                                ],
+                            ).ask()
+
+                            if not new_mode or new_mode == "back":
+                                break
+
+                            if new_mode == "manual":
+                                config["system"]["interval"] = 0
+                                save_config(config)
+                                print("\nMode changed to Manual.")
+                                input("Press Enter to continue...")
+                                break
+                            elif new_mode == "auto":
+                                while True:
+                                    new_interval = q.text(
+                                        "Enter an interval in minutes (1 for constant checks): "
+                                    ).ask()
+
+                                    if not new_interval:
+                                        break
+
+                                    if new_interval.isdigit():
+                                        config["system"]["interval"] = int(new_interval)
+                                        save_config(config)
+                                        print(
+                                            f"\nInterval changed to {new_interval} minutes."
+                                        )
+                                        input("Press Enter to continue...")
+                                        break
+                                break
+
 
 def main_menu():
     while True:
         clear_screen()
 
         config = load_config()
-
+        db_type = config.get("db_type", "sqlite")
         provider = config["ai_provider"]
         model = config["providers"][provider].get("model", "Unknown")
 
         option = q.select(
-            f"=========== AI system fixer | Current model: {model} ==========\n",
+            f"=========== AI system fixer [{db_type}] | Current model: {model} ==========\n",
             choices=[
                 Choice(title="1. Fix issues", value="fix"),
-                Choice(title="2. Force system scan NOW", value="scan"),
+                Choice(title="2. Force system scan", value="scan"),
                 Choice(title="3. Configure", value="configure"),
                 Choice(title="4. Cleanup Database", value="cleanup"),
                 Choice(title="5. Exit", value="exit"),

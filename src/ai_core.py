@@ -2,6 +2,7 @@ import json
 import os
 import re
 import subprocess
+from typing import Any
 
 import httpx
 from dotenv import load_dotenv
@@ -54,13 +55,14 @@ def _get_ai_client(config: dict) -> tuple[OpenAI, str]:
     key_placeholder = provider_settings.get("api_key")
 
     actual_api_key = os.getenv(key_placeholder)
+    timeout = config.get("http_timeout", 30)
 
     if not actual_api_key and provider != "ollama":
         raise ValueError(
             f"API Key not found! Please ensure {key_placeholder} is set in .env"
         )
 
-    custom_client = httpx.Client(trust_env=False)
+    custom_client = httpx.Client(trust_env=False, timeout=timeout)
 
     client = OpenAI(
         base_url=base_url,
@@ -103,7 +105,7 @@ def _get_system_snapshot() -> str:
 
 
 def generate_solution(
-    raw_log: str, config: dict, prev_error: str = ""
+    raw_log: str, config: dict, prev_error: Any | None | str = ""
 ) -> tuple[str, str]:
     """Sends a request to AI and return a tuple."""
     client, model = _get_ai_client(config)
