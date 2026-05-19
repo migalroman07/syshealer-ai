@@ -1,13 +1,24 @@
 import json
 import os
+import shutil
 import sys
+from typing import Any, Dict
 
 # Dynamically calculate absolute path to the project root.
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CONFIG_PATH = os.path.join(BASE_DIR, "config.json")
+CONFIG_BAK_PATH = os.path.join(BASE_DIR, "config.json.bak")
 
-DEFAULT_CONFIG = {
+MAX_RETRIES: int = 3
+DEFAULT_LOG_LENGTH: int = 8000
+HTTP_TIMEOUT: int = 30
+
+DEFAULT_CONFIG: Dict[str, Any] = {
+    "db_type": "sqlite",
     "ai_provider": "groq",
+    "max_log_length": DEFAULT_LOG_LENGTH,
+    "max_retries": MAX_RETRIES,
+    "http_timeout": HTTP_TIMEOUT,
     "providers": {
         "groq": {
             "base_url": "https://api.groq.com/openai/v1",
@@ -66,7 +77,7 @@ DEFAULT_CONFIG = {
             ],
         },
     },
-    "system": {"interval": 30, "max_log_length": 2500, "temperature": 0.1},
+    "system": {"interval": 30, "temperature": 0.1},
     "features": {
         "system_snapshot": True,
         "auto_capture": True,
@@ -82,7 +93,6 @@ DEFAULT_CONFIG = {
 def load_config() -> dict:
     """Loads config file. Creates a default one if it doesn't exist."""
 
-    # Create if doesnt exist.
     if not os.path.exists(CONFIG_PATH):
         save_config(DEFAULT_CONFIG)
         return DEFAULT_CONFIG
@@ -90,36 +100,19 @@ def load_config() -> dict:
     try:
         with open(CONFIG_PATH, "r", encoding="utf-8") as f:
             config = json.load(f)
+
+            if "db_type" not in config:
+                config["db_type"] = "sqlite"
+            return config
     except json.JSONDecodeError as e:
-        print(f"\n[-] ERROR: Your config.json file is corrupted!")
-        print(f"[-] Details: {e}")
-        print(
-            f"[*] Please fix the syntax or delete {CONFIG_PATH} to reset to defaults."
-        )
-        sys.exit(1)
-
-    migrated = False
-
-    # Features auto-migration.
-    if "features" not in config:
-        config["features"] = DEFAULT_CONFIG["features"]
-        migrated = True
-
-    if "providers" not in config:
-        config["providers"] = {}
-
-    for provider, data in DEFAULT_CONFIG["providers"].items():
-        if provider not in config["providers"]:
-            config["providers"][provider] = data
-            migrated = True
-
-    if migrated:
-        save_config(config)
-
-    return config
+        print(f"\n[-] ERROR: Your config.json file is corrupted! Loading defaults.")
+        return DEFAULT_CONFIG
 
 
 def save_config(updated_config):
-    """Saves changes to the config file."""
+    """Saves changes to the config file. Backups config file."""
+    if os.path.exists(CONFIG_PATH):
+        shutil.copy2(CONFIG_PATH, CONFIG_BAK_PATH)
+
     with open(CONFIG_PATH, "w", encoding="utf-8") as f:
         json.dump(updated_config, f, indent=4, ensure_ascii=False)
