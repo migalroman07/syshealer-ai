@@ -8,8 +8,6 @@ from src.database import Incident, SessionLocal
 
 
 def sanitize_and_compress(log_text: str) -> str:
-    """Clears log from system data and prevents leaks."""
-    # 1. Prevent Log Injection.
     dangerous_patterns = [
         r"(?i)ignore previous",
         r"(?i)system prompt",
@@ -18,7 +16,7 @@ def sanitize_and_compress(log_text: str) -> str:
     ]
     for pat in dangerous_patterns:
         log_text = re.sub(pat, "[MALICIOUS_PROMPT_REMOVED]", log_text)
-    # Remove provate data.
+
     log_text = re.sub(r"0x[0-9a-fA-F]{5,}", "[HEX_DUMP]", log_text)
     log_text = re.sub(r"\b(?:\d{1,3}\.){3}\d{1,3}\b", "[IP_REDACTED]", log_text)
     log_text = re.sub(
@@ -27,7 +25,7 @@ def sanitize_and_compress(log_text: str) -> str:
         log_text,
         flags=re.MULTILINE,
     )
-
+    log_text = re.sub(r"\s+", " ", log_text)
     return log_text.strip()
 
 
@@ -37,10 +35,19 @@ def generate_log_hash(log_text: str) -> str:
     return hashlib.sha256(clean_text.encode("utf-8")).hexdigest()
 
 
-def collect_logs():
+def collect_logs(custom_since: str | None = None):
     print("[*] Polling journalctl for new errors...")
 
     cmd = ["journalctl", "-p", "3", "-x", "-n", "100", "--no-pager"]
+
+    if custom_since:
+        if custom_since == "boot":
+            cmd.append("-b")
+        else:
+            cmd.extend(["--since", custom_since])
+    else:
+        cmd.extend(["-n", "100"])
+
     try:
         result = subprocess.run(cmd, capture_output=True, text=False)
         raw_output = result.stdout.decode("utf-8", errors="replace")

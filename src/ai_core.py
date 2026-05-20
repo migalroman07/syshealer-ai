@@ -22,9 +22,8 @@ Your goal is to write a highly reliable bash script to fix the system error show
 CRITICAL SECURITY RULES (STRICT BLACKLIST):
 1. NEVER stop, kill, disable, or restart `sshd`, `ssh`, `networkd`, or `systemd`. Do not break remote access!
 2. NEVER use destructive commands like `rm -rf /` or format disks. If the disk is full, use safe cleanup (`apt-get clean`).
-3. If a port is blocked, DO NOT blindly kill processes. Find out what process it is first.
+3. If a port is blocked, DO NOT blindly kill processes. Write commands to find the blocking PID (e.g., `ss -tulpn` или `lsof`) and handle it safely.
 """
-
     # Mode switch
     if config["features"].get("autonomous_mode", False):
         mode_rules = """

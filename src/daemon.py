@@ -1,5 +1,6 @@
 import os
 import time
+import uuid
 from datetime import datetime
 
 from sqlalchemy.orm import Session
@@ -39,7 +40,11 @@ def daemon_fixer(pending_logs, config, db: Session):
             if clean_commands and "MANUAL_INTERVENTION_REQUIRED" not in clean_commands:
                 script_dir = os.path.join(BASE_DIR, "data", "scripts")
                 os.makedirs(script_dir, exist_ok=True)
-                script_path = os.path.join(script_dir, f"fix_incident_{log.id}.sh")
+
+                script_id = uuid.uuid4().hex[:8]
+                script_path = os.path.join(
+                    script_dir, f"fix_incident_{log.id}_{script_id}.sh"
+                )
 
                 with open(script_path, "w", encoding="utf-8") as f:
                     if not clean_commands.startswith("#!"):

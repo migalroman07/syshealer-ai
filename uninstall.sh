@@ -12,13 +12,12 @@ systemctl disable syshealer.service 2>/dev/null || true
 rm -f /etc/systemd/system/syshealer.service
 systemctl daemon-reload
 
-echo "[*] 2. Removing global CLI command..."
+echo "[*] 2. Removing global CLI command and sudoers..."
 rm -f /usr/local/bin/syshealer
+rm -f /etc/sudoers.d/syshealer
 
-echo "[*] 3. Cleaning up Python virtual environment..."
-PROJECT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
-rm -rf "$PROJECT_DIR/ai_env"
+echo "[*] 3. Cleaning up system user and installation directory..."
+userdel syshealer 2>/dev/null || true
+rm -rf /opt/syshealer
 
 echo "[+] SysHealer-AI system components have been removed."
-echo "    Your database config is kept safe."
-echo "    To delete the project completely, just remove this folder."
