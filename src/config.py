@@ -84,7 +84,6 @@ DEFAULT_CONFIG: Dict[str, Any] = {
         "autonomous_mode": False,
         "auto_summary": True,
         "circuit_breaker": True,
-        "smart_placeholders": True,
         "pause_resume_hint": True,
     },
 }
@@ -103,6 +102,8 @@ def load_config() -> dict:
 
             if "db_type" not in config:
                 config["db_type"] = "sqlite"
+            if "autonomous_mode" not in config:
+                config["features"]["autonomous_mode"] = False
             return config
     except json.JSONDecodeError as e:
         print(f"\n[-] ERROR: Your config.json file is corrupted! Loading defaults.")

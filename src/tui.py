@@ -10,6 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from src.ai_core import generate_solution
+from src.collector import collect_logs
 from src.config import BASE_DIR, load_config, save_config
 from src.database import Incident, SessionLocal
 
@@ -371,12 +372,43 @@ def fix_menu():
                     Choice("1. Pending", value="pending"),
                     Choice("2. Waiting", value="waiting"),
                     Choice("3. Solved", value="resolved"),
+                    Choice("4. Force scan system.", value="scan"),
+                    Choice("5. Cleanup database.", value="cleanup"),
                     Choice("<- Back", value="back"),
                 ],
             ).ask()
 
             if not log_status or log_status == "back":
                 return
+
+            if log_status == "scan":
+                clear_screen()
+                time_choice = q.select(
+                    "How far back should we scan the system logs?",
+                    choices=[
+                        Choice("1. Last 1 hour", value="1 hour ago"),
+                        Choice("2. Last 24 hours", value="24 hours ago"),
+                        Choice("3. Last 7 days", value="7 days ago"),
+                        Choice("4. Since current system boot", value="boot"),
+                        Choice("<- Cancel", value="back"),
+                    ],
+                ).ask()
+
+                if not time_choice or time_choice == "back":
+                    continue
+
+                clear_screen()
+                print(f"[*] Force scanning journalctl ({time_choice})...\n")
+
+                collect_logs()
+
+                print(
+                    "[+] Scan complete! Check the 'Fix issues' -> 'Pending' or 'Waiting' menu."
+                )
+                input("\nPress Enter to return...")
+
+            if log_status == "cleanup":
+                cleanup_menu()
 
             requested_logs = db.scalars(
                 select(Incident).where(Incident.status == log_status)
@@ -643,11 +675,11 @@ def configure_menu(config):
                             value="circuit_breaker",
                             checked=f_conf.get("circuit_breaker", True),
                         ),
-                        Choice(
-                            "Smart Placeholders (Ask for missing values)",
-                            value="smart_placeholders",
-                            checked=f_conf.get("smart_placeholders", True),
-                        ),
+                        # Choice(
+                        #     "Smart Placeholders (Ask for missing values)",
+                        #     value="smart_placeholders",
+                        #     checked=f_conf.get("smart_placeholders", True),
+                        # ),
                     ],
                 ).ask()
 
@@ -658,7 +690,6 @@ def configure_menu(config):
                         "autonomous_mode",
                         "auto_summary",
                         "circuit_breaker",
-                        "smart_placeholders",
                     ]
                     for key in keys:
                         config["features"][key] = key in selected
@@ -714,6 +745,7 @@ def configure_menu(config):
                         else:
                             config["db_type"] = "postgres"
 
+                        save_config()
                         print(f"DB type changed to {db_type}.")
                         continue
 
@@ -773,47 +805,16 @@ def main_menu():
             f"=========== AI system fixer [{db_type}] | Current model: {model} ==========\n",
             choices=[
                 Choice(title="1. Fix issues", value="fix"),
-                Choice(title="2. Force system scan", value="scan"),
-                Choice(title="3. Configure", value="configure"),
-                Choice(title="4. Cleanup Database", value="cleanup"),
-                Choice(title="5. Exit", value="exit"),
+                Choice(title="2. Configure", value="configure"),
+                Choice(title="3. Exit", value="exit"),
             ],
         ).ask()
 
         match option:
             case "fix":
                 fix_menu()
-            case "scan":
-                clear_screen()
-                time_choice = q.select(
-                    "How far back should we scan the system logs?",
-                    choices=[
-                        Choice("1. Last 1 hour", value="1 hour ago"),
-                        Choice("2. Last 24 hours", value="24 hours ago"),
-                        Choice("3. Last 7 days", value="7 days ago"),
-                        Choice("4. Since current system boot", value="boot"),
-                        Choice("<- Cancel", value="back"),
-                    ],
-                ).ask()
-
-                if not time_choice or time_choice == "back":
-                    continue
-
-                clear_screen()
-                print(f"[*] Force scanning journalctl ({time_choice})...\n")
-
-                from src.collector import collect_logs
-
-                collect_logs(custom_since=time_choice)
-
-                print(
-                    "[+] Scan complete! Check the 'Fix issues' -> 'Pending' or 'Waiting' menu."
-                )
-                input("\nPress Enter to return...")
             case "configure":
                 configure_menu(config)
-            case "cleanup":
-                cleanup_menu()
             case _:
                 clear_screen()
                 print("Bye")

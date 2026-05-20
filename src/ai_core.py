@@ -13,37 +13,48 @@ from src.config import BASE_DIR
 env_path = os.path.join(BASE_DIR, ".env")
 load_dotenv(env_path, override=True)
 
-PROMPT_TEMPLATE = """You are an Expert Linux DevOps Engineer resolving a production incident.
 
-CRITICAL SRE RULES:
-1. DIAGNOSE FIRST: 
-   - If a port is in use, DO NOT just restart the service. Write commands to find the blocking PID (e.g., `ss -tulpn` or `lsof`) and kill it.
-   - If the disk is full, DO NOT install new packages. Write safe cleanup commands (e.g., `apt-get clean`, `journalctl --vacuum-time=1d`).
-   - If a dpkg lock is held, write a command to find the blocking process before removing the lock.
-2. AVOID DUPLICATION: Formulate ONE final cohesive bash script.
+def build_prompt(config: dict, raw_log: str) -> str:
+    # Prompt core.
+    base_rules = """You are an Elite Linux SRE resolving a critical production incident.
+Your goal is to write a highly reliable bash script to fix the system error shown in the logs.
 
-OUTPUT FORMAT INSTRUCTIONS (CRITICAL):
-You MUST respond STRICTLY with a valid JSON object. Do NOT wrap the JSON in markdown code blocks (like ```json). Do NOT add any conversational text before or after the JSON.
+CRITICAL SECURITY RULES (STRICT BLACKLIST):
+1. NEVER stop, kill, disable, or restart `sshd`, `ssh`, `networkd`, or `systemd`. Do not break remote access!
+2. NEVER use destructive commands like `rm -rf /` or format disks. If the disk is full, use safe cleanup (`apt-get clean`).
+3. If a port is blocked, DO NOT blindly kill processes. Find out what process it is first.
+"""
 
-The JSON object MUST contain exactly these 3 keys:
+    # Mode switch
+    if config["features"].get("autonomous_mode", False):
+        mode_rules = """
+SCRIPT GENERATION RULES (AUTONOMOUS MODE - ON):
+1. You have FULL AUTOMATION rights. You MUST NOT use placeholders.
+2. Resolve missing variables (PIDs, IPs, ports) dynamically inside bash pipelines (e.g., `TARGET_PID=$(lsof -t -i:80)`).
+3. The script must be self-executing without human input. Add safety checks before destructive actions (e.g., `if [ -n "$TARGET_PID" ]; then kill -9 $TARGET_PID; fi`).
+"""
+    else:
+        mode_rules = """
+SCRIPT GENERATION RULES (SAFE MODE - OFF):
+1. You are strictly FORBIDDEN from guessing or dynamically resolving PIDs, ports, IPs, or passwords inside bash.
+2. If you lack a specific value, you MUST use a SAFE PLACEHOLDER in brackets (e.g., `<BLOCKED_PID>`).
+3. Exactly ONE line above the placeholder, you MUST add a bash comment containing the exact terminal command the admin should run to find this value (e.g., `# Run 'ss -tulpn | grep 80' to find the PID`).
+"""
+
+    # Answer rules.
+    format_rules = """
+OUTPUT FORMAT (STRICT EXECUTABLE JSON):
+You MUST respond with a valid JSON object. No markdown blockticks.
 {
-  "reasoning": "Step-by-step detailed analysis of the root cause. This is your scratchpad to think deeply. Be as detailed as you want here.",
-  "short_desc": "A VERY brief summary of the issue (MAXIMUM 5-7 words). Example: 'Port 8080 is busy with some process.'.",
-  "script": "#!/bin/bash\\n\\n# Your final executable bash script here. Put all explanations as bash comments (#) INSIDE this script."
+  "reasoning": "Step-by-step root cause analysis.",
+  "short_desc": "Summary of the issue.",
+  "script": "#!/bin/bash\\nset -e\\n\\n<YOUR_COMMANDS>"
 }
 
 System Log:
 """
 
-DESC_PROMPT = """You are a Linux Server Monitor. Analyze the following system log snippet.
-Provide a VERY SHORT summary of the problem.
-RULES:
-1. Maximum 5-7 words.
-2. Only output the summary text, no conversational filler.
-Example: 'Not enough space on the disk'.
-
-System Log:
-"""
+    return f"{base_rules}\n{mode_rules}\n{format_rules}\n{raw_log}"
 
 
 def _get_ai_client(config: dict) -> tuple[OpenAI, str]:
@@ -109,6 +120,16 @@ def generate_solution(
 ) -> tuple[str, str]:
     """Sends a request to AI and return a tuple."""
     client, model = _get_ai_client(config)
+
+    # build promt depending on features anabled or not.
+    prompt = build_prompt(config, raw_log)
+
+    if prev_error:
+        prompt += (
+            f"\n\n[CRITICAL FAILURE] The bash script you generated previously CRASHED during execution!\n"
+            f"--- BASH ERROR OUTPUT ---\n{prev_error}\n-------------------------\n\n"
+            f"YOUR TASK FOR THIS ATTEMPT: Analyze the bash error. Output a COMPLETELY REVISED script in JSON."
+        )
 
     max_len = config["system"].get("max_log_length", 2000)
     trimmed_log = raw_log[-max_len:]
