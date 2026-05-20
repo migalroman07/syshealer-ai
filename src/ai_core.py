@@ -51,7 +51,7 @@ You MUST respond with a valid JSON object. No markdown blockticks.
 
 
 def _get_ai_client(config: dict) -> tuple[OpenAI, str]:
-    """Intrenal function to create an OpenAI client."""
+    """Internal function to create an OpenAI client."""
     provider = config["ai_provider"]
     provider_settings = config["providers"][provider]
     base_url = provider_settings.get("base_url")

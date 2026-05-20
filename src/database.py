@@ -26,7 +26,7 @@ db_type = config.get("db_type", "sqlite")
 if db_type == "sqlite":
     db_path = os.path.join(BASE_DIR, "syshealer.db")
     SQLALCHEMY_DATABASE_URL = f"sqlite:///{db_path}"
-    # check_same_thread=False for simaltenious daemon and tui work.
+    # check_same_thread=False for simultaneous daemon and tui work.
     engine = create_engine(
         SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread": False}
     )

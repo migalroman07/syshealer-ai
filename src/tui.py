@@ -300,13 +300,13 @@ def fix_log(log: Incident, db: Session):
                 db.commit()
 
                 # Save output.
-                auto_capture = features.get("auto_capture", True)
+                prauto_capture = features.get("auto_capture", True)
                 log_file = "/tmp/syshealer_script.log"
 
                 if auto_capture:
-                    cmd = f"sudo bash -c 'set -o pipefail; {script_path} 2>&1 | tee {log_file}'"
+                    cmd = f"bash -c 'set -o pipefail; sudo {script_path} 2>&1 | tee {log_file}'"
                 else:
-                    cmd = f"sudo bash {script_path}"
+                    cmd = f"sudo {script_path}"
 
                 print("\n[*] Executing script...")
                 exit_status = os.system(cmd)
@@ -439,7 +439,7 @@ def fix_menu():
 
                 explanation = (
                     str("\n" + desc)
-                    if desc and desc != "No desciption"
+                    if desc and desc != "No description"
                     else ("\n" + "=" * 30)
                 )
 
@@ -745,7 +745,7 @@ def configure_menu(config):
                             "========== Choose DB type ==========",
                             choices=[
                                 Choice("1. SQLite", value="sqlite"),
-                                Choice("2. PostreSQl", value="postgres"),
+                                Choice("2. PostgreSQl", value="postgres"),
                                 Choice("<- Back", value="back"),
                             ],
                         ).ask()
