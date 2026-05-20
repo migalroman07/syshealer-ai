@@ -1,5 +1,5 @@
-# tui.py: SessionLocao
-# provides the ui and configures app.
+# tui.py
+# Provides the ui and configures app.
 import glob
 import os
 import re
