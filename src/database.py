@@ -1,4 +1,5 @@
 import os
+import re
 import sys
 from datetime import datetime
 
@@ -42,18 +43,24 @@ else:
     try:
         url_obj = make_url(SQLALCHEMY_DATABASE_URL)
         target_db = url_obj.database
+
+        if not re.match(r"^[a-zA-Z0-9_]+$", target_db):
+            print("[-] ERROR: Invalid database name.")
+            sys.exit(1)
+
         admin_url = url_obj.set(database="postgres")
         temp_engine = create_engine(admin_url, isolation_level="AUTOCOMMIT")
-        with temp_engine.connect() as conn:
-            exists = conn.execute(
-                text(f"SELECT 1 FROM pg_database WHERE datname = '{target_db}'")
-            ).scalar()
-            if not exists:
-                conn.execute(text(f'CREATE DATABASE "{target_db}"'))
-        temp_engine.dispose()
-    except Exception:
-        pass
-    engine = create_engine(SQLALCHEMY_DATABASE_URL)
+        try:
+            with temp_engine.connect() as conn:
+                exists = conn.execute(
+                    text(f"SELECT 1 FROM pg_database WHERE datname = '{target_db}'")
+                ).scalar()
+                if not exists:
+                    conn.execute(text(f'CREATE DATABASE "{target_db}"'))
+        finally:
+            temp_engine.dispose()
+    except Exception as e:
+        print(f"[-] Database initialization error: {e}")
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()

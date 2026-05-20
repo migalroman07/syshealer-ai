@@ -2,6 +2,7 @@
 # provides the ui and configures app.
 import os
 import re
+import uuid
 
 import questionary as q
 from dotenv import get_key, set_key
@@ -264,7 +265,11 @@ def fix_log(log: Incident, db: Session):
             print("=============================================\n")
             script_dir = os.path.join(BASE_DIR, "data", "scripts")
             os.makedirs(script_dir, exist_ok=True)
-            script_path = os.path.join(script_dir, f"fix_incident_{log.id}.sh")
+
+            script_id = uuid.uuid4().hex[:8]
+            script_path = os.path.join(
+                script_dir, f"fix_incident_{log.id}_{script_id}.sh"
+            )
 
             with open(script_path, "w", encoding="utf-8") as f:
                 if not clean_commands.startswith("#!"):
@@ -288,11 +293,11 @@ def fix_log(log: Incident, db: Session):
                 # Save output.
                 auto_capture = features.get("auto_capture", True)
                 log_file = "/tmp/syshealer_script.log"
-                # Execute via bash. jj
+
                 if auto_capture:
-                    cmd = f"bash -c 'set -o pipefail; {script_path} 2>&1 | tee {log_file}'"
+                    cmd = f"sudo bash -c 'set -o pipefail; {script_path} 2>&1 | tee {log_file}'"
                 else:
-                    cmd = f"bash {script_path}"
+                    cmd = f"sudo bash {script_path}"
 
                 print("\n[*] Executing script...")
                 exit_status = os.system(cmd)
@@ -400,7 +405,7 @@ def fix_menu():
                 clear_screen()
                 print(f"[*] Force scanning journalctl ({time_choice})...\n")
 
-                collect_logs()
+                collect_logs(time_choice)
 
                 print(
                     "[+] Scan complete! Check the 'Fix issues' -> 'Pending' or 'Waiting' menu."
@@ -745,7 +750,7 @@ def configure_menu(config):
                         else:
                             config["db_type"] = "postgres"
 
-                        save_config()
+                        save_config(config)
                         print(f"DB type changed to {db_type}.")
                         continue
 
