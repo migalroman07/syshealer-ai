@@ -1,5 +1,6 @@
 # tui.py: SessionLocao
 # provides the ui and configures app.
+import glob
 import os
 import re
 import uuid
@@ -40,15 +41,23 @@ def cleanup_menu():
             if target == "resolved":
                 logs = db.query(Incident).filter(Incident.status == "resolved").all()
             else:
-                logs = db.query(Incident).all()
+                logs = db.query(Incident).filter(Incident.status != "ignored").all()
 
             count = 0
             for log in logs:
-                script_path = os.path.join(
+                pattern = os.path.join(
+                    BASE_DIR, "data", "scripts", f"fix_incident_{log.id}_*.sh"
+                )
+                for file_path in glob.glob(pattern):
+                    if os.path.exists(file_path):
+                        os.remove(file_path)
+
+                legacy_path = os.path.join(
                     BASE_DIR, "data", "scripts", f"fix_incident_{log.id}.sh"
                 )
-                if os.path.exists(script_path):
-                    os.remove(script_path)
+                if os.path.exists(legacy_path):
+                    os.remove(legacy_path)
+
                 db.delete(log)
                 count += 1
 
@@ -152,9 +161,9 @@ def fix_log(log: Incident, db: Session):
             if action == "retry":
                 log.attempt = 3
             elif action == "delete":
-                db.delete(log)
+                log.status = "ignored"
                 db.commit()
-                print("\n[+] Log deleted.")
+                print("\n[+] Log ignored. It won't be collected again.")
                 input("Press Enter to return...")
                 break
             else:
@@ -237,9 +246,9 @@ def fix_log(log: Incident, db: Session):
                     db.commit()
                     continue
                 elif action == "delete":
-                    db.delete(log)
+                    log.status = "ignored"
                     db.commit()
-                    print("\n[+] Log deleted successfully.")
+                    print("\n[+] Log ignored. It won't be collected again.")
                     break
                 else:
                     log.status = (
@@ -494,11 +503,11 @@ def delete_logs(db: Session, log_status: str):
             f"Are you sure you want to delete {len(selected_ids)} logs?"
         ).ask()
         if confirm:
-            db.query(Incident).filter(Incident.id.in_(selected_ids)).delete(
-                synchronize_session=False
+            db.query(Incident).filter(Incident.id.in_(selected_ids)).update(
+                {"status": "ignored"}, synchronize_session=False
             )
             db.commit()
-            print(f"[+] Successfully deleted {len(selected_ids)} logs.")
+            print(f"[+] Successfully ignored {len(selected_ids)} logs.")
             input("Press Enter to continue...")
 
 

@@ -85,12 +85,16 @@ def collect_logs(custom_since: str | None = None):
             log_hash = generate_log_hash(clean_log)
             existing = (
                 db.query(Incident)
-                .filter(Incident.log_hash == log_hash, Incident.executed == False)
+                .filter(Incident.log_hash == log_hash)
+                .order_by(Incident.id.desc())
                 .first()
             )
 
             if existing:
-                existing.occurrences += 1
+                if existing.status == "ignored":
+                    continue
+                if not existing.executed and existing.status != "resolved":
+                    existing.occurrences += 1
             else:
                 new_incident = Incident(
                     raw_log=f"Service: {service}\nDetails:\n{clean_log}",
