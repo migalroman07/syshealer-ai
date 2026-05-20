@@ -64,7 +64,12 @@ def daemon_fixer(pending_logs, config, db: Session):
 
         except Exception as e:
             log_daemon(f"Error on Incident ID {log.id}: {e}")
-            log.status = "pending"
+            log.attempt += 1
+            if log.attempt >= 3:
+                log.status = "ignored"
+                log_daemon(f"Incident ID {log.id} ignored after 3 failed attempts.")
+            else:
+                log.status = "pending"
             db.commit()
 
 
